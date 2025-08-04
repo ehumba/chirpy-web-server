@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func endpointHandler(w http.ResponseWriter, r *http.Request) {
+func handlerEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(200)
 	w.Write([]byte("OK"))
@@ -23,6 +23,7 @@ func main() {
 	// set up database
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
+	platform := os.Getenv("PLATFORM")
 	db, err := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
 	if err != nil {
@@ -36,25 +37,26 @@ func main() {
 
 	apiCfg := apiConfig{
 		dbQueries: dbQueries,
+		platform:  platform,
 	}
 
 	// Handle the root path
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
 
 	// Handle the endpoint
-	mux.HandleFunc("GET /api/healthz", endpointHandler)
+	mux.HandleFunc("GET /api/healthz", handlerEndpoint)
 
 	// Handle the counter
-	mux.HandleFunc("GET /admin/metrics", apiCfg.countHandler)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerCount)
 
 	// Handle the reset
-	mux.HandleFunc("POST /admin/reset", apiCfg.resetHandler)
-
-	// Handle the POST request
-	mux.HandleFunc("POST /api/validate_chirp", apiCfg.postReqHandler)
+	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 
 	// Handle new user creation
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+
+	// Handle new chirp creation
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirps)
 
 	server := http.Server{
 		Addr:    ":8080",
@@ -67,6 +69,7 @@ func main() {
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
+	platform       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -76,7 +79,7 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	})
 }
 
-func (a *apiConfig) countHandler(w http.ResponseWriter, r *http.Request) {
+func (a *apiConfig) handlerCount(w http.ResponseWriter, r *http.Request) {
 	hits := fmt.Sprintf(
 		`<html>
   <body>
@@ -90,8 +93,17 @@ func (a *apiConfig) countHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(hits))
 }
 
-func (a *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
+func (a *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
+	if a.platform != "dev" {
+		respondWithError(w, 403, "you don't have access to this endpoint")
+		return
+	}
 	a.fileserverHits.Store(0)
+	err := a.dbQueries.DeleteUsers(r.Context())
+	if err != nil {
+		respondWithError(w, 500, "failed to delete user data")
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(200)
 	w.Write([]byte("Reset"))

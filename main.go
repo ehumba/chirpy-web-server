@@ -43,20 +43,22 @@ func main() {
 	// Handle the root path
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
 
-	// Handle the endpoint
 	mux.HandleFunc("GET /api/healthz", handlerEndpoint)
 
-	// Handle the counter
+	// Counter endpoint
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerCount)
 
-	// Handle the reset
+	// Reset endpoint
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 
-	// Handle new user creation
+	// New user creation endpoint
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 
-	// Handle new chirp creation
+	// Chirp creation endpoint
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirps)
+
+	// Get Chirps enpoint
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 
 	server := http.Server{
 		Addr:    ":8080",

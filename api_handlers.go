@@ -79,3 +79,24 @@ func (a *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, 201, &newChirp)
 }
+
+func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+	chirpsDB, err := a.dbQueries.GetChirps(r.Context())
+	if err != nil {
+		respondWithError(w, 500, "failed to get chirps")
+	}
+
+	chirpsArray := []Chirp{}
+	for _, chirpDB := range chirpsDB {
+		chirp := Chirp{
+			ID:        chirpDB.ID,
+			CreatedAt: chirpDB.CreatedAt,
+			UpdatedAt: chirpDB.UpdatedAt,
+			Body:      chirpDB.Body,
+			UserID:    chirpDB.UserID,
+		}
+		chirpsArray = append(chirpsArray, chirp)
+	}
+
+	respondWithJSON(w, 200, chirpsArray)
+}

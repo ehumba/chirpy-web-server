@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"unicode/utf8"
 
+	"github.com/ehumba/chirpy-web-server/internal/auth"
 	"github.com/ehumba/chirpy-web-server/internal/database"
 	"github.com/google/uuid"
 )
@@ -12,7 +13,8 @@ import (
 func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	type reqParams struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -23,7 +25,13 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUserDb, err := a.dbQueries.CreateUser(r.Context(), params.Email)
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, 500, "invalid password")
+		return
+	}
+
+	newUserDb, err := a.dbQueries.CreateUser(r.Context(), database.CreateUserParams{params.Email, hashedPassword})
 	if err != nil {
 		respondWithError(w, 500, "failed to create new user")
 		return
@@ -84,6 +92,7 @@ func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	chirpsDB, err := a.dbQueries.GetChirps(r.Context())
 	if err != nil {
 		respondWithError(w, 500, "failed to get chirps")
+		return
 	}
 
 	chirpsArray := []Chirp{}
@@ -99,4 +108,53 @@ func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, 200, chirpsArray)
+}
+
+func (a *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+	idString := r.PathValue("chirpID")
+	chirpDB, err := a.dbQueries.GetChirp(r.Context(), uuid.MustParse(idString))
+	if err != nil {
+		respondWithError(w, 404, "chirp not found")
+		return
+	}
+
+	chirp := Chirp{
+		ID:        chirpDB.ID,
+		CreatedAt: chirpDB.CreatedAt,
+		UpdatedAt: chirpDB.UpdatedAt,
+		Body:      chirpDB.Body,
+		UserID:    chirpDB.UserID,
+	}
+	respondWithJSON(w, 200, chirp)
+}
+
+func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, 500, "could not decode parameters")
+		return
+	}
+
+	userDB, err := a.dbQueries.LookUpByEmail(r.Context(), params.Email)
+	hashErr := auth.CheckPasswordHash(params.Password, userDB.HashedPassword)
+	if err != nil || hashErr != nil {
+		respondWithError(w, 401, "Incorrect email or password")
+		return
+	}
+
+	user := User{
+		ID:        userDB.ID,
+		CreatedAt: userDB.CreatedAt,
+		UpdatedAt: userDB.UpdatedAt,
+		Email:     userDB.Email,
+	}
+
+	respondWithJSON(w, 200, user)
 }

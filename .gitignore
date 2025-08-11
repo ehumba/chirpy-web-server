@@ -1,3 +1,4 @@
 .env
 testing.http
 .gitignore
+/internal/auth/jwt_test.go

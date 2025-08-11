@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ehumba/chirpy-web-server/internal/auth"
@@ -50,29 +51,41 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 func (a *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	type parameters struct {
-		Body   string    `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 500, "could not decode parameters")
+		respondWithError(w, 400, "could not decode parameters")
+		return
+	}
+
+	// authenticate
+	bearerToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "invalid authentication header")
+		return
+	}
+
+	id, err := auth.ValidateJWT(bearerToken, a.secret)
+	if err != nil {
+		respondWithError(w, 401, "no authorization")
 		return
 	}
 
 	// check if the chirp is valid
 	cleansedBody := removeProfane(params.Body)
 
-	charCount := utf8.RuneCountInString(params.Body)
+	charCount := utf8.RuneCountInString(cleansedBody)
 	if charCount > 140 {
 		respondWithError(w, 400, "Chirp is too long")
 		return
 	}
 
 	// if valid, respond.
-	newChirpDb, err := a.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{Body: cleansedBody, UserID: params.UserID})
+	newChirpDb, err := a.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{Body: cleansedBody, UserID: id})
 	if err != nil {
 		respondWithError(w, 500, "failed to create new chirp")
 		return
@@ -130,8 +143,9 @@ func (a *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 
 func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Password string `json:"password"`
-		Email    string `json:"email"`
+		Password         string `json:"password"`
+		Email            string `json:"email"`
+		ExpiresInSeconds int    `json:"expires_in_seconds,omitempty"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -142,10 +156,20 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if params.ExpiresInSeconds == 0 || params.ExpiresInSeconds > 3600 {
+		params.ExpiresInSeconds = 3600
+	}
+
 	userDB, err := a.dbQueries.LookUpByEmail(r.Context(), params.Email)
 	hashErr := auth.CheckPasswordHash(params.Password, userDB.HashedPassword)
 	if err != nil || hashErr != nil {
 		respondWithError(w, 401, "Incorrect email or password")
+		return
+	}
+
+	token, err := auth.MakeJWT(userDB.ID, a.secret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	if err != nil {
+		respondWithError(w, 500, "failed to create authentication token")
 		return
 	}
 
@@ -156,5 +180,13 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		Email:     userDB.Email,
 	}
 
-	respondWithJSON(w, 200, user)
+	resStruct := struct {
+		User  `json:",inline"`
+		Token string `json:"token"`
+	}{
+		User:  user,
+		Token: token,
+	}
+
+	respondWithJSON(w, 200, resStruct)
 }

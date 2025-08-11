@@ -24,6 +24,8 @@ func main() {
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
+	secret := os.Getenv("SECRET")
+
 	db, err := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
 	if err != nil {
@@ -38,6 +40,7 @@ func main() {
 	apiCfg := apiConfig{
 		dbQueries: dbQueries,
 		platform:  platform,
+		secret:    secret,
 	}
 
 	// Handle the root path
@@ -78,6 +81,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
 	platform       string
+	secret         string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {

@@ -143,9 +143,8 @@ func (a *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 
 func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Password         string `json:"password"`
-		Email            string `json:"email"`
-		ExpiresInSeconds int    `json:"expires_in_seconds,omitempty"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -156,10 +155,6 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if params.ExpiresInSeconds == 0 || params.ExpiresInSeconds > 3600 {
-		params.ExpiresInSeconds = 3600
-	}
-
 	userDB, err := a.dbQueries.LookUpByEmail(r.Context(), params.Email)
 	hashErr := auth.CheckPasswordHash(params.Password, userDB.HashedPassword)
 	if err != nil || hashErr != nil {
@@ -167,9 +162,26 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(userDB.ID, a.secret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	authToken, err := auth.MakeJWT(userDB.ID, a.secret, time.Hour)
 	if err != nil {
 		respondWithError(w, 500, "failed to create authentication token")
+		return
+	}
+
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(w, 500, "failed to create refresh token")
+		return
+	}
+
+	refreshTokenParams := database.GenerateRefreshTokenParams{
+		Token:     refreshToken,
+		UserID:    userDB.ID,
+		ExpiresAt: time.Now().Add(60 * 24 * time.Hour),
+	}
+	_, err = a.dbQueries.GenerateRefreshToken(r.Context(), refreshTokenParams)
+	if err != nil {
+		respondWithError(w, 500, "failed to save refresh token")
 		return
 	}
 
@@ -181,11 +193,13 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resStruct := struct {
-		User  `json:",inline"`
-		Token string `json:"token"`
+		User         `json:",inline"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}{
-		User:  user,
-		Token: token,
+		User:         user,
+		Token:        authToken,
+		RefreshToken: refreshToken,
 	}
 
 	respondWithJSON(w, 200, resStruct)

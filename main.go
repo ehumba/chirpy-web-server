@@ -69,6 +69,12 @@ func main() {
 	// Login endpoint
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 
+	// Refresh endpoint
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+
+	// Revoke endpoint
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,

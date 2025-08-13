@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -18,7 +20,7 @@ VALUES (
     $1,
     $2
 )
-RETURNING id, created_at, updated_at, email, hashed_password
+RETURNING id, created_at, updated_at, email, hashed_password, is_chirpy_red
 `
 
 type CreateUserParams struct {
@@ -35,6 +37,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
@@ -49,7 +52,7 @@ func (q *Queries) DeleteUsers(ctx context.Context) error {
 }
 
 const lookUpByEmail = `-- name: LookUpByEmail :one
-SELECT id, created_at, updated_at, email, hashed_password FROM users
+SELECT id, created_at, updated_at, email, hashed_password, is_chirpy_red FROM users
 WHERE email = $1
 `
 
@@ -62,6 +65,58 @@ func (q *Queries) LookUpByEmail(ctx context.Context, email string) (User, error)
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
+}
+
+const lookUpByID = `-- name: LookUpByID :one
+SELECT id, created_at, updated_at, email, hashed_password, is_chirpy_red FROM users
+WHERE id = $1
+`
+
+func (q *Queries) LookUpByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, lookUpByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.HashedPassword,
+		&i.IsChirpyRed,
+	)
+	return i, err
+}
+
+const makeChirpyRed = `-- name: MakeChirpyRed :exec
+UPDATE users
+SET is_chirpy_red = TRUE,
+updated_at = NOW()
+WHERE id = $1
+AND is_chirpy_red = FALSE
+`
+
+func (q *Queries) MakeChirpyRed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, makeChirpyRed, id)
+	return err
+}
+
+const updateUserData = `-- name: UpdateUserData :exec
+UPDATE users
+SET email = $2,
+hashed_password = $3,
+updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateUserDataParams struct {
+	ID             uuid.UUID
+	Email          string
+	HashedPassword string
+}
+
+func (q *Queries) UpdateUserData(ctx context.Context, arg UpdateUserDataParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserData, arg.ID, arg.Email, arg.HashedPassword)
+	return err
 }

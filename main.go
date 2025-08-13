@@ -75,6 +75,15 @@ func main() {
 	// Revoke endpoint
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 
+	// Update user data endpoint
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdate)
+
+	// Delete chirp
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
+
+	// Polka webhooks
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWebhooks)
+
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,

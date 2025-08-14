@@ -40,7 +40,7 @@ Create a new account with an email and a password by sending a request in the fo
 ```
 
 - **PUT /api/users**
-Update the user data with the same request format as for creating a new account
+Update the user data with the same request format as for creating a new account.
 
 - **POST /api/login**
 Login with your password and email.
@@ -73,6 +73,7 @@ Optional query parameters:
 
 Example: 
 `GET /api/chirps?author_id=123&sort=desc`
+
 
 - **GET /api/chirps/{chirpID}**
 View a specified chirp by its ID.

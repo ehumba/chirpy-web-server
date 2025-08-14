@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -105,6 +106,7 @@ func (a *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 
 	s := r.URL.Query().Get("author_id")
+	order := r.URL.Query().Get("sort")
 
 	var (
 		chirpsDB []database.Chirp
@@ -129,6 +131,12 @@ func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, 500, "failed to get chirps from author")
 			return
 		}
+	}
+
+	if order == "desc" {
+		sort.Slice(chirpsDB, func(i, j int) bool {
+			return chirpsDB[j].CreatedAt.Before(chirpsDB[i].CreatedAt)
+		})
 	}
 
 	chirpsArray := []Chirp{}

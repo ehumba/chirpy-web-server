@@ -39,10 +39,11 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newUser := User{
-		ID:        newUserDb.ID,
-		CreatedAt: newUserDb.CreatedAt,
-		UpdatedAt: newUserDb.UpdatedAt,
-		Email:     newUserDb.Email,
+		ID:          newUserDb.ID,
+		CreatedAt:   newUserDb.CreatedAt,
+		UpdatedAt:   newUserDb.UpdatedAt,
+		Email:       newUserDb.Email,
+		IsChirpyRed: newUserDb.IsChirpyRed,
 	}
 
 	respondWithJSON(w, 201, newUser)
@@ -102,10 +103,32 @@ func (a *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirpsDB, err := a.dbQueries.GetChirps(r.Context())
-	if err != nil {
-		respondWithError(w, 500, "failed to get chirps")
-		return
+
+	s := r.URL.Query().Get("author_id")
+
+	var (
+		chirpsDB []database.Chirp
+		err      error
+	)
+
+	if s == "" {
+		chirpsDB, err = a.dbQueries.GetChirps(r.Context())
+		if err != nil {
+			respondWithError(w, 500, "failed to get chirps")
+			return
+		}
+	} else {
+		authorID, err := uuid.Parse(s)
+		if err != nil {
+			respondWithError(w, 400, "invalid author id")
+			return
+		}
+
+		chirpsDB, err = a.dbQueries.GetChirpsFromAuthor(r.Context(), authorID)
+		if err != nil {
+			respondWithError(w, 500, "failed to get chirps from author")
+			return
+		}
 	}
 
 	chirpsArray := []Chirp{}
@@ -186,10 +209,11 @@ func (a *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := User{
-		ID:        userDB.ID,
-		CreatedAt: userDB.CreatedAt,
-		UpdatedAt: userDB.UpdatedAt,
-		Email:     userDB.Email,
+		ID:          userDB.ID,
+		CreatedAt:   userDB.CreatedAt,
+		UpdatedAt:   userDB.UpdatedAt,
+		Email:       userDB.Email,
+		IsChirpyRed: userDB.IsChirpyRed,
 	}
 
 	resStruct := struct {

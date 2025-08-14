@@ -4,10 +4,22 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/ehumba/chirpy-web-server/internal/auth"
 	"github.com/google/uuid"
 )
 
 func (a *apiConfig) handlerWebhooks(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "invalid authorization header")
+		return
+	}
+
+	if apiKey != a.polkaKey {
+		respondWithError(w, 401, "invalid API key")
+		return
+	}
+
 	type data struct {
 		UserID string `json:"user_id"`
 	}
@@ -19,7 +31,7 @@ func (a *apiConfig) handlerWebhooks(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	params := reqParams{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, 400, "invalid request")
 		return
@@ -44,7 +56,7 @@ func (a *apiConfig) handlerWebhooks(w http.ResponseWriter, r *http.Request) {
 
 	err = a.dbQueries.MakeChirpyRed(r.Context(), id)
 	if err != nil {
-		respondWithError(w, 400, "unable to update user to chirpy red")
+		respondWithError(w, 500, "unable to upgrade user to chirpy red")
 		return
 	}
 
